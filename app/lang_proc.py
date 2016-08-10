@@ -25,7 +25,7 @@ def lemmatize_query(query):
     return ' '.join(lemmatised)
 
 
-def tagQuery(query):
+def tag_query(query):
     taggedquery = ""
     try:
         tags = pt.tag(query)
@@ -53,7 +53,7 @@ def tagQuery(query):
     return taggedquery
 
 
-def runScript(f1, f2):
+def tag(f1, f2):
     text = codecs.open(f1, 'r', encoding='utf-8')
     text_out = open(f2, 'w')
     text_lines = []
