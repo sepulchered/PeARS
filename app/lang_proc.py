@@ -1,8 +1,9 @@
+#-*- coding: utf-8 -*-
 import codecs
 import re
 
 import textblob_aptagger
-from textblob import Word, wordnet
+from textblob import Word
 
 
 
@@ -26,82 +27,60 @@ def lemmatize_query(query):
 
 
 def tag_query(query):
-    taggedquery = ""
-    try:
-        tags = pt.tag(query)
-        if len(tags) > 0:
-            for word in tags:
-                surface = word[0]
-                pos = word[1]
-                try:
-                    if pos[0] == 'N' or pos[0] == 'V':
-                        tag = Word(surface).lemmatize(
-                                pos[0].lower()) + "_" + pos[0]
-                    else:
-                        if pos[0] == 'J':
-                            # Hack -- convert pos J to pos A because that's how
-                            # adjectives are represented in dm file
-                            tag = Word(surface).lemmatize().lower() + "_A"
-                        else:
-                            tag = Word(surface).lemmatize(
-                            ).lower() + "_" + pos[0]
-                    taggedquery = taggedquery + tag + " "
-                except:
-                    taggedquery = taggedquery + surface + "_" + pos[0] + " "
-    except:
-        print "ERROR processing query", query
-    return taggedquery
-
-
-def tag(f1, f2):
-    text = codecs.open(f1, 'r', encoding='utf-8')
-    text_out = open(f2, 'w')
-    text_lines = []
-    tmpline = ""
-
-    c = 0  # Line counter, just to check on the first line
-    for line in text:
-        line = line.rstrip('\n')
-        if c == 0 and line[0] == '#':  # If first line with URL info
-            text_out.write(line + '\n')
-            c += 1
+    tagged = []
+    for surface, pos in pt.tag(query):
+        if pos[0] in ('N', 'V'):
+            tag = '{}_{}'.format(Word(surface).lemmatize(pos[0].lower()), pos[0])
+        elif pos[0] == 'J':
+                # Hack -- convert pos J to pos A because that's how
+                # adjectives are represented in dm file
+            tag = '{}_A'.format(Word(surface).lemmatize().lower())
         else:
-            # Add some pre-processing here (boilerplate removal, etc)
-            line = line.replace('^', '')
-            # Remove links, marked by a * in lynx
-            m = re.search('^\s+\*', line)
-            m2 = re.search('^\s+\+', line)
-            m3 = re.search('\.\s*$', line)  # Find end of sentence
-            if not m and line != "\n":
-                if m3:
-                    tmpline = tmpline + " " + line
-                    text_lines.append(tmpline)
-                    tmpline = ""
+            tag = '{}_{}'.format(Word(surface).lemmatize().lower(), pos[0])
+        tagged.append(tag)
+
+    return ' '.join(tagged)
+
+
+def write_tagged_file(input_file, output_file):
+    url_info = ''
+    first_line = True
+
+    with codecs.open(input_file, 'r', encoding='utf-8') as text:
+        tmpline, text_lines = "", []
+        for line in text:
+            line = line.strip()
+            if first_line and line.startswith('#'):  # If first line with URL info
+                url_info = line
+                first_line = False
+            else:
+                # Add some pre-processing here (boilerplate removal, etc)
+                line = line.replace('^', '')
+                # Remove links, marked by a * in lynx
+                if not re.search('^\s+\*', line):
+                    if re.search('\.\s*$', line):  # end of sentence
+                        tmpline += " " + line
+                        text_lines.append(line)
+                        tmpline = ""
+                    else:
+                        tmpline += " " + line
+
+    with open(output_file, 'w') as text_out:
+        text_out.write('{}\n'.format(url_info))
+        for line in text_lines:
+            tagged = []
+            line = line.strip()
+            for surface, pos in pt.tag(line):
+                if pos[0] in ('N', 'V'):
+                    tagged.append('{}_{}'.format(Word(surface).lemmatize(pos[0].lower()), pos))
                 else:
-                    tmpline = tmpline + " " + line
-    text.close()
+                    tagged.append('{}_{}'.format(Word(surface).lemmatize().lower(), pos))
 
-    for l in text_lines:
-        taggedline = ""
-        l = l.rstrip('\n')
-        try:
-            tags = pt.tag(l)
-            if len(tags) > 0:
-                for word in tags:
-                    surface = word[0]
-                    pos = word[1]
-                    try:
-                        if pos[0] == 'N' or pos[0] == 'V':
-                            tag = Word(surface).lemmatize(
-                                    pos[0].lower()) + "_" + pos
-                        else:
-                            tag = Word(surface).lemmatize().lower() + "_" + pos
-                        taggedline = taggedline + tag + " "
-                    except:
-                        taggedline = taggedline + surface + "_" + pos + " "
-        except:
-            print "ERROR processing line", l
+            tagged_line = ' '.join(tagged)
+            tagged_line = tagged_line.encode('utf8', 'replace')
+            text_out.write('{}\n'.format(tagged_line))
 
-        to_print = taggedline.encode('utf8', 'replace') + "\n"
-        text_out.write(to_print)
-    text_out.close()
+
+if __name__ == '__main__':
+    import sys
+    write_tagged_file(sys.argv[1], sys.argv[2])
